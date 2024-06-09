@@ -1,0 +1,17 @@
+{
+  "manifest_version": 2,
+  "name": "WebRequest Listener",
+  "description": "Monitor file uploads via web requests.",
+  "version": "1.0",
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "webRequestBody",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  }
+
+}
