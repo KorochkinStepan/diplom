@@ -1,7 +1,7 @@
-##HOW TO DEPLOY
+## HOW TO DEPLOY
 
 
-###SERVER
+### SERVER
 1 - change .env
 2 - ```docker-compose -f docker-elastic.yaml ```
 3 - go to ```"http://localhost:5601/"```
@@ -10,7 +10,7 @@
 DONE!
 
 
-###USER
+### USER
 1 - get client.exe from https://disk.yandex.ru/d/ndkyOuTZ9vIBWw (or build it by  ```"pyinstaller --onefile core/client.py"```)
 2 - install NSSM (https://www.nssm.cc/download)
 3 - ```nssm.exe install ProjectService ```
