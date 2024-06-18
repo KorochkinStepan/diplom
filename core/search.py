@@ -29,29 +29,36 @@ leaks_mapping = {user_files_index: data_leaks_files_index,
 
 # Function to search for sensitive data in a file using Elasticsearch
 def search_keys_in_documents(index, keys_list):
-    for key in keys_list:
-        query = {
-            "query": {
-                "match": {
-                    "content": key
-                }
+    #for key in keys_list:
+    query = {
+        "query": {
+            "bool": {
+                "should": [
+                    {"match": {"content": key}} for key in keys_list
+                ]
             }
         }
-        res = es.search(index=index, body=query, _source=True)  # Retrieving the source document
-        if res['hits']['total']['value'] > 0:
-            logger.debug(f"Key '{key}' found in documents.")
-            deleted = []
-            for hit in res['hits']['hits']:
+    }
+    res = es.search(index=index, body=query, _source=True)  # Retrieving the source document
+    if res['hits']['total']['value'] > 0:
+        print(f"Key '{keys_list}' found in documents.")
+        logger.debug(f"Key '{keys_list}' found in documents.")
+        deleted = []
+        for hit in res['hits']['hits']:
 
-                # Creating a new document in the "leak" index
+            # Creating a new document in the "leak" index
 
-                es.index(index=leaks_mapping[index], body=hit['_source'])
-                if hit['_id'] not in deleted:
+            es.index(index=leaks_mapping[index], body=hit['_source']|{"leak":keys_list})
+            if hit['_id'] not in deleted:
+                try:
                     es.delete(index=index, id=hit['_id'])
-                    deleted.append(hit['_id'])
+                except Exception as e:
+                    pass
+                deleted.append(hit['_id'])
 
-        else:
-            logger.debug(f"Key '{key}' not found in documents.")
+    else:
+        print(f"Key '{keys_list}' not found in documents.")
+        logger.debug(f"Key '{keys_list}' not found in documents.")
 
     must_not_clauses = [{"match": {"content": keyword}} for keyword in keys_list]
     # Construct the Elasticsearch query

@@ -3,6 +3,15 @@ import socket
 import json
 import time
 import os
+import os
+from pathlib import Path
+import win32clipboard as clipboard
+import win32clipboard
+from PIL import ImageGrab
+import easyocr
+import docx2txt
+from pypdf import PdfReader
+import pandas as pd
 import json
 from dotenv import load_dotenv
 import watchdog.observers
@@ -16,8 +25,9 @@ import win32clipboard
 from utils import (
     create_index_with_mapping,
     search_all_files,
-    get_clipboard_data,
+    get_clipboard_content_type_and_hash,
     get_file_size,
+    easyocr_recognition,
     parse_date
 )
 from threading import Thread
@@ -44,8 +54,10 @@ except Exception as e:
 
 
 
-def send_clipboard_data(data):
+def send_clipboard_data(data_type, data):
+    print(f'sended {data}')
     doc = {
+        'data_type': data_type,
         'content': data,
         'client_id': CLIENT_ID,
         'client_name': client_name,
@@ -55,16 +67,26 @@ def send_clipboard_data(data):
 
 
 def clipboard_monitoring():
-    cached_data = get_clipboard_data()
-    send_clipboard_data(cached_data)
-    while True:
-        time.sleep(1)
-        fresh_data = get_clipboard_data()
-        if fresh_data != cached_data:
-            logger.debug(f"{fresh_data} NOW IS GOING TO ELASTIC YOU, SNITCH!")
-            send_clipboard_data(fresh_data)
-            cached_data = fresh_data
+    last_clipboard_data = (None, None)
 
+    while True:
+        try:
+            current_clipboard_data = get_clipboard_content_type_and_hash()
+        except Exception as e:
+            print(f"Error accessing clipboard: {e}")
+            current_clipboard_data = (None, None, None)
+
+        if current_clipboard_data[1] != last_clipboard_data:
+            if current_clipboard_data[0] == "image":
+                current_clipboard_data[2].save(f'{CLIENT_ID}.png')
+                img_data = easyocr_recognition(f'{CLIENT_ID}.png')
+                send_clipboard_data('image', img_data)
+                last_clipboard_data = current_clipboard_data[1]
+            else:
+                last_clipboard_data = current_clipboard_data[1]
+                send_clipboard_data('text', current_clipboard_data[2])
+
+        time.sleep(1)  # Проверять буфер обмена каждую секунду
 
 class FileEventHandler(watchdog.events.PatternMatchingEventHandler):
     def __init__(self):
@@ -75,11 +97,26 @@ class FileEventHandler(watchdog.events.PatternMatchingEventHandler):
         self.index = user_files_index
 
     def on_created(self, event):
+        print('on_created used')
         if event.is_directory:
             return
-
-        with open(event.src_path, 'r', encoding="utf-8") as file_content:
-            content = file_content.read()
+        file_path = event.src_path
+        base, ext = os.path.splitext(file_path)
+        if ext == '.docx' or ext == '.doc':
+            content = docx2txt.process(file_path)
+        elif ext == '.csv':
+            content = pd.read_csv(file_path).__str__()
+        elif ext == ".xlsx" or ext == ".xls":
+            content = pd.read_excel(file_path).__str__()
+        elif ext == ".pdf":
+            page_content = []
+            reader = PdfReader(file_path)
+            for page in reader.pages:
+                page_content.append(page.extract_text())
+            content = " ".join(page_content)
+        else:
+            with open(file_path, 'r', encoding="utf-8") as file_content:
+                content = file_content.read()
 
             doc = {
                 'file_path': event.src_path,
@@ -104,8 +141,23 @@ class FileEventHandler(watchdog.events.PatternMatchingEventHandler):
         logger.debug(f"File deleted: {event.src_path}")
 
     def on_modified(self, event):
-        with open(event.src_path, 'r', encoding="utf-8") as file_content:
-            content = file_content.read()
+        file_path = event.src_path
+        base, ext = os.path.splitext(file_path)
+        if ext == '.docx' or ext == '.doc':
+            content = docx2txt.process(file_path)
+        elif ext == '.csv':
+            content = pd.read_csv(file_path).__str__()
+        elif ext == ".xlsx" or ext == ".xls":
+            content = pd.read_excel(file_path).__str__()
+        elif ext == ".pdf":
+            page_content = []
+            reader = PdfReader(file_path)
+            for page in reader.pages:
+                page_content.append(page.extract_text())
+            content = " ".join(page_content)
+        else:
+            with open(file_path, 'r', encoding="utf-8") as file_content:
+                content = file_content.read()
         doc = {
             'file_path': event.src_path,
             'content': content,
